@@ -12,8 +12,15 @@
 
 namespace
 {
+    void print_case_header(const char *name)
+    {
+        std::cout << "[thread_safe_queue_test] " << name << '\n';
+    }
+
     void test_basic_push_try_pop_and_size()
     {
+        print_case_header("test_basic_push_try_pop_and_size");
+        std::cout << "  input: ThreadSafeQueue<int>(capacity=2), push(1), push(2), try_pop twice\n";
         memory_engine::ThreadSafeQueue<int> queue(2);
 
         assert(queue.empty());
@@ -21,6 +28,7 @@ namespace
 
         queue.push(1);
         queue.push(2);
+        std::cout << "  output: queue size after pushes=" << queue.size() << '\n';
 
         assert(!queue.empty());
         assert(queue.size() == 2);
@@ -28,17 +36,22 @@ namespace
         int value = 0;
         assert(queue.try_pop(value));
         assert(value == 1);
+        std::cout << "  output: first try_pop returned value=" << value << '\n';
 
         assert(queue.try_pop(value));
         assert(value == 2);
+        std::cout << "  output: second try_pop returned value=" << value << '\n';
 
         assert(!queue.try_pop(value));
         assert(queue.empty());
         assert(queue.size() == 0);
+        std::cout << "  output: queue empty after pops=" << std::boolalpha << queue.empty() << '\n';
     }
 
     void test_wait_and_pop_and_shutdown()
     {
+        print_case_header("test_wait_and_pop_and_shutdown");
+        std::cout << "  input: ThreadSafeQueue<int>(capacity=1), consumer waits, producer pushes(7), shutdown()\n";
         memory_engine::ThreadSafeQueue<int> queue(1);
 
         std::promise<int> result_promise;
@@ -48,7 +61,9 @@ namespace
                              { promise.set_value(queue.wait_and_pop()); });
 
         queue.push(7);
-        assert(result_future.get() == 7);
+        const int popped = result_future.get();
+        assert(popped == 7);
+        std::cout << "  output: wait_and_pop returned " << popped << '\n';
 
         queue.shutdown();
         consumer.join();
@@ -64,10 +79,13 @@ namespace
         }
 
         assert(threw);
+        std::cout << "  output: push after shutdown threw QueueClosedException\n";
     }
 
     void test_multi_producer_multi_consumer()
     {
+        print_case_header("test_multi_producer_multi_consumer");
+        std::cout << "  input: 4 producers x 250 integers, 4 consumers, queue capacity=16\n";
         constexpr std::size_t producer_count = 4;
         constexpr std::size_t consumer_count = 4;
         constexpr std::size_t per_producer = 250;
@@ -128,10 +146,15 @@ namespace
         assert(consumed.load(std::memory_order_relaxed) == total_items);
         assert(sum.load(std::memory_order_relaxed) == expected_sum);
         assert(queue.empty());
+        std::cout << "  output: consumed=" << consumed.load(std::memory_order_relaxed)
+                  << ", sum=" << sum.load(std::memory_order_relaxed)
+                  << ", expected_sum=" << expected_sum << '\n';
     }
 
     void test_zero_capacity_rejected()
     {
+        print_case_header("test_zero_capacity_rejected");
+        std::cout << "  input: ThreadSafeQueue<int>(capacity=0)\n";
         bool threw = false;
         try
         {
@@ -144,11 +167,13 @@ namespace
         }
 
         assert(threw);
+        std::cout << "  output: constructor rejected zero capacity with std::invalid_argument\n";
     }
 }
 
 int main()
 {
+    std::cout << "[thread_safe_queue_test] starting\n";
     test_basic_push_try_pop_and_size();
     test_wait_and_pop_and_shutdown();
     test_multi_producer_multi_consumer();

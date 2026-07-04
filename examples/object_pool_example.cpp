@@ -18,6 +18,9 @@ struct User
 
 int main()
 {
+    std::cout << "[object_pool_example] starting\n";
+    std::cout << "  input: ObjectPool<User>(capacity=1), acquire() twice with release between scopes\n";
+
     memory_engine::ObjectPool<User> pool(1);
 
     void *firstAddress;
@@ -26,12 +29,15 @@ int main()
         auto user = pool.acquire();
         firstAddress = user.get();
 
-        std::cout << firstAddress << '\n';
+        std::cout << "  output: first acquire returned " << firstAddress << '\n';
     }
 
     {
         auto user = pool.acquire();
 
-        std::cout << user.get() << '\n';
+        std::cout << "  output: second acquire returned " << user.get() << '\n';
+        std::cout << "  output: reused address = " << std::boolalpha << (user.get() == firstAddress) << '\n';
     }
+
+    std::cout << "object_pool_example passed\n";
 }

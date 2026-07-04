@@ -7,6 +7,11 @@
 
 namespace
 {
+    void print_case_header(const char *name)
+    {
+        std::cout << "[object_pool_test] " << name << '\n';
+    }
+
     struct Tracking
     {
         static inline int alive = 0;
@@ -32,7 +37,9 @@ namespace
 
     void test_basic_acquire_release_and_reuse()
     {
+        print_case_header("test_basic_acquire_release_and_reuse");
         reset_tracking();
+        std::cout << "  input: ObjectPool<Tracking>(capacity=2), acquire() twice with reset in between\n";
 
         std::size_t first_address = 0;
 
@@ -46,6 +53,7 @@ namespace
 
             auto first = pool.acquire();
             assert(first);
+            std::cout << "  output: first acquire returned " << first.get() << '\n';
             assert(pool.available() == 1);
             assert(pool.size() == 1);
             assert(!pool.empty());
@@ -60,19 +68,24 @@ namespace
             auto second = pool.acquire();
             assert(second);
             assert(reinterpret_cast<std::size_t>(second.get()) == first_address);
+            std::cout << "  output: second acquire reused address " << second.get() << '\n';
 
             auto third = pool.acquire();
             assert(third);
             assert(pool.empty());
+            std::cout << "  output: third acquire exhausted the pool; empty() is now true\n";
         }
 
         assert(Tracking::alive == 0);
         assert(Tracking::destroyed == 2);
+        std::cout << "  final state: alive=" << Tracking::alive << ", destroyed=" << Tracking::destroyed << "\n";
     }
 
     void test_exhaustion_returns_null()
     {
+        print_case_header("test_exhaustion_returns_null");
         reset_tracking();
+        std::cout << "  input: ObjectPool<Tracking>(capacity=1), acquire() twice\n";
 
         memory_engine::ObjectPool<Tracking> pool(1);
         auto first = pool.acquire();
@@ -82,19 +95,23 @@ namespace
         assert(!second);
         assert(pool.available() == 0);
         assert(pool.size() == 1);
+        std::cout << "  output: first acquire succeeded at " << first.get() << ", second acquire returned nullptr\n";
     }
 
     void test_copy_and_move_are_disabled()
     {
+        print_case_header("test_copy_and_move_are_disabled");
         static_assert(!std::is_copy_constructible_v<memory_engine::ObjectPool<Tracking>>);
         static_assert(!std::is_copy_assignable_v<memory_engine::ObjectPool<Tracking>>);
         static_assert(!std::is_move_constructible_v<memory_engine::ObjectPool<Tracking>>);
         static_assert(!std::is_move_assignable_v<memory_engine::ObjectPool<Tracking>>);
+        std::cout << "  output: copy and move operations are deleted at compile time\n";
     }
 }
 
 int main()
 {
+    std::cout << "[object_pool_test] starting\n";
     test_basic_acquire_release_and_reuse();
     test_exhaustion_returns_null();
     test_copy_and_move_are_disabled();
