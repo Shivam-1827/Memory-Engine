@@ -10,20 +10,96 @@ This is not a tutorial. This is an engineering project built the way it would be
 
 ---
 
+## Project Status
+
+| Area                 | Status                           |
+| -------------------- | -------------------------------- |
+| ObjectPool V1        | ✅ Complete                      |
+| ObjectPool V2        | ✅ Complete                      |
+| ThreadSafeQueue      | ✅ Complete                      |
+| Benchmark framework  | ✅ Complete                      |
+| Examples             | ✅ Complete                      |
+| Config               | ✅ Complete                      |
+| Exceptions           | ✅ Complete                      |
+| Project architecture | ✅ Complete                      |
+| Core implementation  | ✅ Complete                      |
+| Tests                | 🟡 Should be expanded            |
+| Benchmark results    | 🟡 Need to be run and documented |
+| Documentation        | 🟡 Should be completed           |
+
+---
+
+## At A Glance
+
+### Architecture
+
+```mermaid
+flowchart LR
+    App[Application Code] --> Pool[ObjectPoolV2]
+    App --> Queue[ThreadSafeQueue]
+    Pool -->|RAII ownership| Ptr[unique_ptr + custom deleter]
+    Queue -->|Producer / Consumer| Workers[Worker Threads]
+    Workers --> Bench[Benchmark Utilities]
+```
+
+### Ownership Model
+
+```mermaid
+flowchart TD
+    Pool[ObjectPoolV2] -->|acquire()| Ptr[unique_ptr<T, Deleter>]
+    Ptr -->|scope ends| Deleter[Custom Deleter]
+    Deleter -->|release()| Pool
+    Ptr -->|owns exactly one object| Obj[Constructed Object]
+```
+
+### Queue Synchronization
+
+```mermaid
+sequenceDiagram
+    participant P as Producer
+    participant Q as ThreadSafeQueue
+    participant C as Consumer
+
+    P->>Q: push(value)
+    Q-->>P: block if full
+    Q->>Q: emplace value
+    Q-->>C: notify_one(not_empty)
+    C->>Q: wait_and_pop()
+    Q-->>C: block if empty
+    Q->>C: return value
+    C-->>Q: notify_one(not_full)
+```
+
+### Benchmark Screenshots
+
+Place captured benchmark charts here when you run the suite locally. Suggested captures:
+
+- allocation throughput
+- queue throughput
+- latency comparison
+- memory reuse comparison
+
+Example layout:
+
+![Allocation benchmark screenshot](docs/images/allocation-benchmark.png)
+![Queue benchmark screenshot](docs/images/queue-benchmark.png)
+
+---
+
 ## Project Phases
 
-| Phase | Branch                        | Status | What You Build                        |
-|-------|-------------------------------|--------|---------------------------------------|
-| 0     | `phase/0-architecture`        | ✅     | Architecture doc — the WHY            |
-| 1     | `phase/1-benchmark`           | ✅     | Timer, BenchmarkRunner, Statistics    |
-| 2     | `phase/2-allocation-study`    | ✅     | Measure new/malloc/unique/shared_ptr  |
-| 3     | `phase/3-object-pool`         | ✅     | ObjectPool v1 (hardcoded type)        |
-| 4     | `phase/4-generic-pool`        | ✅     | ObjectPool\<T\> + PooledPtr\<T\>       |
-| 5     | `phase/5-thread-safety`       | ✅     | ThreadSafePool with mutex + CV        |
-| 6     | `phase/6-thread-safe-queue`   | ✅     | ThreadSafeQueue (MPMC)                |
-| 7     | `phase/7-smart-pointers`      | ⬜     | Custom deleters + STL allocator       |
-| 8     | `phase/8-benchmarks`          | ✅     | Full comparison benchmark suite       |
-| 9     | `phase/9-production`          | ⬜     | Arena, Slab, Lock-Free ideas          |
+| Phase | Branch                      | Status | What You Build                       |
+| ----- | --------------------------- | ------ | ------------------------------------ |
+| 0     | `phase/0-architecture`      | ✅     | Architecture doc — the WHY           |
+| 1     | `phase/1-benchmark`         | ✅     | Timer, BenchmarkRunner, Statistics   |
+| 2     | `phase/2-allocation-study`  | ✅     | Measure new/malloc/unique/shared_ptr |
+| 3     | `phase/3-object-pool`       | ✅     | ObjectPool v1 (hardcoded type)       |
+| 4     | `phase/4-generic-pool`      | ✅     | ObjectPool\<T\> + PooledPtr\<T\>     |
+| 5     | `phase/5-thread-safety`     | ✅     | ThreadSafePool with mutex + CV       |
+| 6     | `phase/6-thread-safe-queue` | ✅     | ThreadSafeQueue (MPMC)               |
+| 7     | `phase/7-smart-pointers`    | ⬜     | Custom deleters + STL allocator      |
+| 8     | `phase/8-benchmarks`        | ✅     | Full comparison benchmark suite      |
+| 9     | `phase/9-production`        | ⬜     | Arena, Slab, Lock-Free ideas         |
 
 ---
 
@@ -84,16 +160,30 @@ cd build
 
 ---
 
+## Performance Table
+
+Use this section to paste measured results from your benchmark runs. The numbers below are placeholders until you capture real data on your machine.
+
+| Benchmark          | Ops/sec | Avg ns/op | Peak Memory | Notes                    |
+| ------------------ | ------: | --------: | ----------: | ------------------------ |
+| `new/delete`       |     TBD |       TBD |         TBD | Baseline heap allocation |
+| `std::make_unique` |     TBD |       TBD |         TBD | Smart-pointer baseline   |
+| `ObjectPool`       |     TBD |       TBD |         TBD | Fixed-size pool          |
+| `ObjectPoolV2`     |     TBD |       TBD |         TBD | Raw-memory pool          |
+| `ThreadSafeQueue`  |     TBD |       TBD |         TBD | Blocking bounded queue   |
+
+---
+
 ## Key Design Decisions
 
-| Decision | Choice | Why |
-|----------|--------|-----|
-| Free list | Intrusive (inside objects) | Zero extra memory |
-| Pool exhaustion | Return nullptr | Systems code avoids exceptions |
-| Thread safety | mutex + condition_variable | Correct before fast |
-| Queue implementation | std::deque + mutex | Simple, correct, debuggable |
-| Ownership | RAII (PooledPtr) | No leaks by design |
-| Templating | template\<typename T\> | Works for any object |
+| Decision             | Choice                     | Why                            |
+| -------------------- | -------------------------- | ------------------------------ |
+| Free list            | Intrusive (inside objects) | Zero extra memory              |
+| Pool exhaustion      | Return nullptr             | Systems code avoids exceptions |
+| Thread safety        | mutex + condition_variable | Correct before fast            |
+| Queue implementation | std::deque + mutex         | Simple, correct, debuggable    |
+| Ownership            | RAII (PooledPtr)           | No leaks by design             |
+| Templating           | template\<typename T\>     | Works for any object           |
 
 ---
 
