@@ -1,219 +1,185 @@
 # Memory Engine
 
-> A production-quality C++ memory management library, built phase by phase to understand how real systems like Redis, Nginx, RocksDB, and Envoy manage memory at scale.
+Memory Engine is a C++20 header-first systems library that implements:
 
----
+- a fixed-capacity object pool (`ObjectPool<T>`)
+- a raw-memory object pool with explicit lifetime control (`ObjectPoolV2<T>`)
+- a bounded multi-producer/multi-consumer blocking queue (`ThreadSafeQueue<T>`)
+- small benchmarking utilities (`Timer`, `BenchmarkStatistics`, `BenchmarkRunner`, `BenchmarkReporter`)
 
-## What This Is
+The repository also includes standalone examples, test executables, and a benchmark target built with CMake.
 
-This is not a tutorial. This is an engineering project built the way it would be built at Google, Meta, or Cloudflare — with documented decisions, benchmarks, and production-grade code.
+## Current Status
 
----
+| Area                       | Status                                       |
+| -------------------------- | -------------------------------------------- |
+| ObjectPool V1              | Complete                                     |
+| ObjectPool V2              | Complete                                     |
+| ThreadSafeQueue            | Complete                                     |
+| Benchmark utilities        | Complete                                     |
+| Examples                   | Complete                                     |
+| Tests                      | Complete (basic + behavioral coverage)       |
+| Benchmark data publication | Pending (run and record numbers per machine) |
 
-## Project Status
+## Project Layout
 
-| Area                 | Status                           |
-| -------------------- | -------------------------------- |
-| ObjectPool V1        | ✅ Complete                      |
-| ObjectPool V2        | ✅ Complete                      |
-| ThreadSafeQueue      | ✅ Complete                      |
-| Benchmark framework  | ✅ Complete                      |
-| Examples             | ✅ Complete                      |
-| Config               | ✅ Complete                      |
-| Exceptions           | ✅ Complete                      |
-| Project architecture | ✅ Complete                      |
-| Core implementation  | ✅ Complete                      |
-| Tests                | 🟡 Should be expanded            |
-| Benchmark results    | 🟡 Need to be run and documented |
-| Documentation        | 🟡 Should be completed           |
-
----
-
-## At A Glance
-
-### Architecture
-
-```mermaid
-flowchart LR
-    App[Application Code] --> Pool[ObjectPoolV2]
-    App --> Queue[ThreadSafeQueue]
-    Pool -->|RAII ownership| Ptr[unique_ptr + custom deleter]
-    Queue -->|Producer / Consumer| Workers[Worker Threads]
-    Workers --> Bench[Benchmark Utilities]
-```
-
-### Ownership Model
-
-```mermaid
-flowchart TD
-    Pool[ObjectPoolV2] -->|acquire()| Ptr[unique_ptr<T, Deleter>]
-    Ptr -->|scope ends| Deleter[Custom Deleter]
-    Deleter -->|release()| Pool
-    Ptr -->|owns exactly one object| Obj[Constructed Object]
-```
-
-### Queue Synchronization
-
-```mermaid
-sequenceDiagram
-    participant P as Producer
-    participant Q as ThreadSafeQueue
-    participant C as Consumer
-
-    P->>Q: push(value)
-    Q-->>P: block if full
-    Q->>Q: emplace value
-    Q-->>C: notify_one(not_empty)
-    C->>Q: wait_and_pop()
-    Q-->>C: block if empty
-    Q->>C: return value
-    C-->>Q: notify_one(not_full)
-```
-
-### Benchmark Screenshots
-
-Place captured benchmark charts here when you run the suite locally. Suggested captures:
-
-- allocation throughput
-- queue throughput
-- latency comparison
-- memory reuse comparison
-
-Example layout:
-
-![Allocation benchmark screenshot](docs/images/allocation-benchmark.png)
-![Queue benchmark screenshot](docs/images/queue-benchmark.png)
-
----
-
-## Project Phases
-
-| Phase | Branch                      | Status | What You Build                       |
-| ----- | --------------------------- | ------ | ------------------------------------ |
-| 0     | `phase/0-architecture`      | ✅     | Architecture doc — the WHY           |
-| 1     | `phase/1-benchmark`         | ✅     | Timer, BenchmarkRunner, Statistics   |
-| 2     | `phase/2-allocation-study`  | ✅     | Measure new/malloc/unique/shared_ptr |
-| 3     | `phase/3-object-pool`       | ✅     | ObjectPool v1 (hardcoded type)       |
-| 4     | `phase/4-generic-pool`      | ✅     | ObjectPool\<T\> + PooledPtr\<T\>     |
-| 5     | `phase/5-thread-safety`     | ✅     | ThreadSafePool with mutex + CV       |
-| 6     | `phase/6-thread-safe-queue` | ✅     | ThreadSafeQueue (MPMC)               |
-| 7     | `phase/7-smart-pointers`    | ⬜     | Custom deleters + STL allocator      |
-| 8     | `phase/8-benchmarks`        | ✅     | Full comparison benchmark suite      |
-| 9     | `phase/9-production`        | ⬜     | Arena, Slab, Lock-Free ideas         |
-
----
-
-## Directory Structure
-
-```
-memory-engine/
+```text
+.
 ├── CMakeLists.txt
 ├── README.md
+├── benchmark/
+│   └── allocation_benchmark.cpp
 ├── docs/
-│   ├── architecture.md          ← Phase 0: The WHY
-│   ├── github-workflow.md       ← Git branching strategy
-│   ├── phase1-benchmark.md      ← Phase 1 learning notes
-│   └── phase2-allocation.md     ← Phase 2 learning notes
+│   ├── architecture.md
+│   ├── benchmarking.md
+│   ├── index.md
+│   ├── object_pool_v1.md
+│   ├── object_pool_v2.md
+│   ├── roadmap.md
+│   ├── testing_and_validation.md
+│   └── thread_safe_queue.md
+├── examples/
+│   ├── object_pool_example.cpp
+│   └── queue_example.cpp
 ├── include/
-│   ├── benchmark/
-│   │   └── Timer.hpp            ← Timer, ScopedTimer, BenchmarkRunner
-│   ├── pool/
-│   │   ├── ObjectPool_v1.hpp    ← Phase 3: single-type pool
-│   │   ├── ObjectPool.hpp       ← Phase 4: template<T> + PooledPtr
-│   │   └── ThreadSafePool.hpp   ← Phase 5: mutex-protected pool
-│   └── queue/
-│       └── ThreadSafeQueue.hpp  ← Phase 6: MPMC blocking queue
-└── src/
-    ├── allocation_study.cpp
-    ├── full_benchmarks.cpp
-    └── ...
+│   └── memory_engine/
+│       ├── benchmark.hpp
+│       ├── config.hpp
+│       ├── exception.hpp
+│       ├── object_pool.hpp
+│       ├── object_pool_v2.hpp
+│       ├── reporter.hpp
+│       ├── statistics.hpp
+│       ├── thread_safe_queue.hpp
+│       └── timer.hpp
+└── tests/
+    ├── benchmark_test.cpp
+    ├── object_pool_test.cpp
+    ├── object_pool_v2_test.cpp
+    └── thread_safe_queue_test.cpp
 ```
 
----
+## Build Requirements
+
+- CMake 3.16+
+- C++20 compiler (GCC/Clang/MSVC with C++20 support)
 
 ## Build
 
 ```bash
-# Debug build (with AddressSanitizer)
-mkdir build && cd build
-cmake -DCMAKE_BUILD_TYPE=Debug ..
-make
-
-# Release build (optimized, for benchmarks)
-cmake -DCMAKE_BUILD_TYPE=Release ..
-make
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
 ```
 
----
-
-## Run Benchmarks
+For debug builds:
 
 ```bash
-cd build
-
-# Phase 2: How expensive is new/delete really?
-./phase2_allocation
-
-# Phase 8: Full comparison — pool vs heap
-./phase8_benchmarks
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
 ```
 
----
+## Executables Produced
 
-## Performance Table
+Configured in `CMakeLists.txt`:
 
-Use this section to paste measured results from your benchmark runs. The numbers below are placeholders until you capture real data on your machine.
+- `object_pool_example`
+- `queue_example`
+- `allocation_benchmark`
+- `object_pool_test`
+- `object_pool_v2_test`
+- `thread_safe_queue_test`
+- `benchmark_test`
 
-| Benchmark          | Ops/sec | Avg ns/op | Peak Memory | Notes                    |
-| ------------------ | ------: | --------: | ----------: | ------------------------ |
-| `new/delete`       |     TBD |       TBD |         TBD | Baseline heap allocation |
-| `std::make_unique` |     TBD |       TBD |         TBD | Smart-pointer baseline   |
-| `ObjectPool`       |     TBD |       TBD |         TBD | Fixed-size pool          |
-| `ObjectPoolV2`     |     TBD |       TBD |         TBD | Raw-memory pool          |
-| `ThreadSafeQueue`  |     TBD |       TBD |         TBD | Blocking bounded queue   |
+## Run Examples
 
----
+```bash
+./build/object_pool_example
+./build/queue_example
+```
 
-## Key Design Decisions
+## Run Benchmark
 
-| Decision             | Choice                     | Why                            |
-| -------------------- | -------------------------- | ------------------------------ |
-| Free list            | Intrusive (inside objects) | Zero extra memory              |
-| Pool exhaustion      | Return nullptr             | Systems code avoids exceptions |
-| Thread safety        | mutex + condition_variable | Correct before fast            |
-| Queue implementation | std::deque + mutex         | Simple, correct, debuggable    |
-| Ownership            | RAII (PooledPtr)           | No leaks by design             |
-| Templating           | template\<typename T\>     | Works for any object           |
+```bash
+./build/allocation_benchmark
+```
 
----
+## Benchmark Workflow
 
-## What You'll Understand After This
+Use the following flow to collect reproducible benchmark results on your machine.
 
-- Why `new/delete` involves locks, searches, and syscalls
-- What heap fragmentation is and why pools eliminate it
-- Why cache locality matters at 100K requests/second
-- How Redis, Nginx, and RocksDB solve this in practice
-- When object pools are NOT the right answer
-- How mutex, lock_guard, unique_lock, and condition_variable work
-- What RAII means and why it prevents every class of memory leak
-- How to measure, benchmark, and prove your optimization actually works
+1. Build in Release mode.
+2. Run benchmark multiple times.
+3. Store raw output and report median/average.
+4. Record compiler and CPU details with results.
 
----
+```bash
+# 1) Build optimized binaries
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
 
-## Engineering Principles Applied
+# 2) Run benchmark repeatedly and save output
+for i in 1 2 3 4 5; do
+    echo "--- run $i ---" >> benchmark_runs.txt
+    ./build/allocation_benchmark >> benchmark_runs.txt
+done
 
-1. **Measure before optimizing** — Phase 1 and 2 exist before any pool code
-2. **Correct before fast** — single-threaded pool before thread-safe
-3. **Simple before generic** — hardcoded type before template
-4. **RAII everywhere** — no raw new/delete in business logic
-5. **Documented decisions** — every design choice has a written reason
+# 3) (Optional) capture compiler and CPU context
+c++ --version > benchmark_env.txt
+uname -a >> benchmark_env.txt
+lscpu >> benchmark_env.txt
+```
 
----
+Add your summarized values in the table below.
 
-## Inspired By
+| Metric               | Value                | Notes                       |
+| -------------------- | -------------------- | --------------------------- |
+| Benchmark executable | allocation_benchmark | Current benchmark target    |
+| Number of runs       | 5 (recommended)      | Increase if results vary    |
+| Median time per run  | TBD                  | Fill from captured output   |
+| Average time per run | TBD                  | Fill from captured output   |
+| Min / Max            | TBD / TBD            | Useful for stability checks |
+| Compiler             | TBD                  | Example: g++ 13.x           |
+| Build type           | Release              | Use optimized build         |
+| CPU / machine        | TBD                  | Include model information   |
 
-- jemalloc (Facebook) — thread-local free lists
-- tcmalloc (Google) — per-thread caches
-- Redis zmalloc — simple, instrumented allocator
-- Nginx pool — per-request memory pools
-- RocksDB Arena — bump-pointer allocator
+## Run Tests
+
+Using CTest:
+
+```bash
+ctest --test-dir build --output-on-failure
+```
+
+Or run binaries directly:
+
+```bash
+./build/object_pool_test
+./build/object_pool_v2_test
+./build/thread_safe_queue_test
+./build/benchmark_test
+```
+
+## Design Notes
+
+- `ObjectPool<T>` stores pre-constructed objects in `std::vector<T>` and reuses slots via a free-index stack.
+- `ObjectPoolV2<T>` allocates raw aligned storage, constructs objects with `std::construct_at`, destroys with `std::destroy_at`, and tracks usage statistics.
+- Both pools return `std::unique_ptr<T, Deleter>` handles so objects are returned to the pool automatically on scope exit.
+- `ThreadSafeQueue<T>` uses `std::mutex` + `std::condition_variable` for bounded blocking semantics and supports graceful `shutdown()`.
+- Queue shutdown causes waiting operations to unblock; pushes after shutdown throw `QueueClosedException`.
+
+## Documentation
+
+For a deeper walkthrough, see:
+
+- `docs/index.md`
+- `docs/architecture.md`
+- `docs/object_pool_v1.md`
+- `docs/object_pool_v2.md`
+- `docs/thread_safe_queue.md`
+- `docs/benchmarking.md`
+- `docs/testing_and_validation.md`
+- `docs/roadmap.md`
+
+## Notes On Performance Results
+
+Benchmark values depend on CPU, compiler, and optimization flags. Record and compare measurements on your own machine when making performance claims.
